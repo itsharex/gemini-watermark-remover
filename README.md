@@ -1,8 +1,16 @@
 [中文文档](README_zh.md)
 
-# Gemini Lossless Watermark Remover - [gemini.pilio.ai](https://gemini.pilio.ai)
+# Gemini Watermark Remover — Lossless Watermark Removal Tool
 
-A high-performance, 100% client-side tool for removing Gemini AI watermarks. Built with pure JavaScript, it leverages a mathematically precise **Reverse Alpha Blending** algorithm rather than unpredictable AI inpainting.
+An open-source tool to **remove Gemini watermarks** from AI-generated images — losslessly and precisely. Built with pure JavaScript, the engine uses a mathematically exact **Reverse Alpha Blending** algorithm instead of unpredictable AI inpainting, delivering pixel-perfect Gemini watermark removal every time.
+
+> **🚀 Looking for an easy Gemini watermark removal tool? Try it now: [pilio.ai/gemini-watermark-remover](https://pilio.ai/gemini-watermark-remover)** — free, no install, works directly in your browser.
+
+<p align="center">
+  <a href="https://pilio.ai/gemini-watermark-remover"><img src="https://img.shields.io/badge/🛠️_Online_Tool-pilio.ai-blue?style=for-the-badge" alt="Online Tool"></a>&nbsp;
+  <a href="https://gemini.pilio.ai/userscript/gemini-watermark-remover.user.js"><img src="https://img.shields.io/badge/🐒_Userscript-Install-green?style=for-the-badge" alt="Userscript"></a>&nbsp;
+  <a href="https://gemini.pilio.ai"><img src="https://img.shields.io/badge/🧪_Dev_Preview-gemini.pilio.ai-gray?style=for-the-badge" alt="Developer Preview"></a>
+</p>
 
 <p align="center">
   <img src="https://count.getloli.com/@gemini-watermark-remover?name=gemini-watermark-remover&theme=minecraft&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" width="400">
@@ -17,7 +25,7 @@ A high-performance, 100% client-side tool for removing Gemini AI watermarks. Bui
 - ✅ **User Friendly** - Simple drag-and-drop interface with instant processing.
 - ✅ **Cross-Platform** - Runs smoothly on all modern web browsers.
 
-## Examples
+## Gemini Watermark Removal Examples
 
 <details open>
 <summary>Click to Expand/Collapse Examples</summary>
@@ -51,13 +59,15 @@ A high-performance, 100% client-side tool for removing Gemini AI watermarks. Bui
 > The author assumes no responsibility for any data loss, image corruption, or unintended modifications. By using this tool, you acknowledge that you understand these risks.
 
 > [!NOTE]
-> **Note**: Disabling any fingerprint defender extensions (e.g., Canvas Fingerprint Defender) to avoid processing errors. https://github.com/GargantuaX/gemini-watermark-remover/issues/3
+> **Note**: Disable any fingerprint defender extensions (e.g., Canvas Fingerprint Defender) to avoid processing errors. https://github.com/GargantuaX/gemini-watermark-remover/issues/3
 
-## Usage
+## How to Remove Gemini Watermarks
 
-### Online Website
+### Online Gemini Watermark Remover (Recommended)
 
-1. Open [gemini.pilio.ai](https://gemini.pilio.ai).
+For all users — the fastest and easiest way to remove Gemini watermarks from images:
+
+1. Open **[pilio.ai/gemini-watermark-remover](https://pilio.ai/gemini-watermark-remover)**.
 2. Drag and drop or click to select your Gemini-generated image.
 3. The engine will automatically process and remove the watermark.
 4. Download the cleaned image.
@@ -69,6 +79,10 @@ A high-performance, 100% client-side tool for removing Gemini AI watermarks. Bui
 3. The script will install automatically.
 4. Navigate to Gemini conversation pages.
 5. Click "Copy Image" or "Download Image" to remove the watermark.
+
+### Developer Preview
+
+If you are a developer or contributor, you can preview the latest development build at [gemini.pilio.ai](https://gemini.pilio.ai). This version may contain experimental features and is not intended for general use.
 
 ## Development
 
@@ -96,7 +110,7 @@ pnpm test
 Regression tests include image fixtures from `src/assets/samples/`.
 These fixture files are part of the repository and should be kept in git so collaborators and CI can run the same checks.
 
-## How it Works
+## How Gemini Watermark Removal Works
 
 ### The Gemini Watermarking Process
 
@@ -229,15 +243,3 @@ The Reverse Alpha Blending method and calibrated watermark masks are based on th
 ## License
 
 [MIT License](./LICENSE)
-
-## Custom Domain
-
-This project is configured for Cloudflare Pages. To use a custom domain:
-
-1.  Go to your Cloudflare Pages dashboard.
-2.  Select your project.
-3.  Go to **Custom Domains**.
-4.  Click **Set up a custom domain**.
-5.  Enter your domain name (e.g., `gemini-watermark-remover.com`) and follow the instructions.
-
-If you are deploying to GitHub Pages, the `public/CNAME` file is used for the custom domain. Update it with your domain name.
