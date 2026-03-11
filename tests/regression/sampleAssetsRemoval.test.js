@@ -7,6 +7,8 @@ import { chromium } from 'playwright';
 
 import { calculateAlphaMap } from '../../src/core/alphaMap.js';
 import { removeWatermark } from '../../src/core/blendModes.js';
+import { removeRepeatedWatermarkLayers } from '../../src/core/multiPassRemoval.js';
+import { processWatermarkImageData } from '../../src/core/watermarkProcessor.js';
 import {
     computeRegionSpatialCorrelation,
     computeRegionGradientCorrelation,
@@ -39,8 +41,7 @@ const KNOWN_GEMINI_SAMPLE_ASSETS = Object.freeze([
     'large3.png'
 ]);
 const KNOWN_NON_GEMINI_SAMPLE_ASSETS = Object.freeze([
-    'image-hHSLePr28CFGv5heI8brr.jpg',
-    'image-hHSLePr28CFGv5heI8brr.png'
+    'image-hHSLePr28CFGv5heI8brr.jpg'
 ]);
 const RESIDUAL_RECALIBRATION_THRESHOLD = 0.5;
 const MIN_SUPPRESSION_FOR_SKIP_RECALIBRATION = 0.18;
@@ -68,6 +69,7 @@ const SUBPIXEL_SCALES = [0.98, 0.99, 1, 1.01, 1.02];
 test('sample asset manifest should classify every image sample exactly once', async () => {
     const files = (await readdir(SAMPLE_DIR))
         .filter((name) => IMAGE_EXTENSIONS.has(path.extname(name).toLowerCase()))
+        .filter((name) => !name.includes('-fix.'))
         .sort((a, b) => a.localeCompare(b));
 
     const classified = [
@@ -248,6 +250,33 @@ function measureRegionDelta(originalImageData, processedImageData, position) {
         totalPixels,
         changedRatio: totalPixels > 0 ? changedPixels / totalPixels : 0,
         avgAbsoluteDeltaPerChannel: totalPixels > 0 ? totalAbsoluteDelta / (totalPixels * 3) : 0
+    };
+}
+
+function getRegionStats(imageData, region) {
+    let sum = 0;
+    let sq = 0;
+    let total = 0;
+
+    for (let row = 0; row < region.height; row++) {
+        for (let col = 0; col < region.width; col++) {
+            const idx = ((region.y + row) * imageData.width + (region.x + col)) * 4;
+            const lum =
+                0.2126 * imageData.data[idx] +
+                0.7152 * imageData.data[idx + 1] +
+                0.0722 * imageData.data[idx + 2];
+            sum += lum;
+            sq += lum * lum;
+            total++;
+        }
+    }
+
+    const meanLum = total > 0 ? sum / total : 0;
+    const variance = total > 0 ? Math.max(0, sq / total - meanLum * meanLum) : 0;
+
+    return {
+        meanLum,
+        stdLum: Math.sqrt(variance)
     };
 }
 
@@ -638,6 +667,168 @@ test('known non-Gemini sample assets should keep the candidate region unchanged'
                 `${fileName}: expected weak-match region delta <= 0.5, got ${result.regionDelta.avgAbsoluteDeltaPerChannel}`
             );
         }
+    } finally {
+        await browser.close();
+    }
+});
+
+test('5.png should attempt repeated removal without overcommitting to a sinkhole pass', async (t) => {
+    let browser;
+    try {
+        browser = await chromium.launch({ headless: true });
+    } catch (error) {
+        if (isMissingPlaywrightExecutableError(error)) {
+            t.skip('Playwright browser binaries are missing in this environment');
+            return;
+        }
+        throw error;
+    }
+
+    const page = await browser.newPage();
+
+    try {
+        const alpha48 = calculateAlphaMap(await decodeImageDataInPage(page, BG48_PATH));
+        const alpha96 = calculateAlphaMap(await decodeImageDataInPage(page, BG96_PATH));
+        const filePath = path.join(SAMPLE_DIR, '5.png');
+        const imageData = await decodeImageDataInPage(page, filePath);
+        const defaultConfig = detectWatermarkConfig(imageData.width, imageData.height);
+        const config = resolveInitialStandardConfig({
+            imageData,
+            defaultConfig,
+            alpha48,
+            alpha96
+        });
+        const position = calculateWatermarkPosition(imageData.width, imageData.height, config);
+        const alphaMap = config.logoSize === 96 ? alpha96 : interpolateAlphaMap(alpha96, 96, config.logoSize);
+
+        const beforeScore = computeRegionSpatialCorrelation({
+            imageData,
+            alphaMap,
+            region: { x: position.x, y: position.y, size: position.width }
+        });
+        const result = removeRepeatedWatermarkLayers({
+            imageData,
+            alphaMap,
+            position,
+            maxPasses: 4
+        });
+        const afterScore = computeRegionSpatialCorrelation({
+            imageData: result.imageData,
+            alphaMap,
+            region: { x: position.x, y: position.y, size: position.width }
+        });
+
+        assert.ok(
+            (result.attemptedPassCount ?? result.passCount) >= 2,
+            `expected repeated-pass attempt, got passCount=${result.passCount}, attempted=${result.attemptedPassCount}`
+        );
+        assert.ok(
+            ['residual-low', 'safety-texture-collapse'].includes(result.stopReason),
+            `unexpected stopReason=${result.stopReason}`
+        );
+        assert.ok(afterScore < beforeScore, `expected some suppression, before=${beforeScore}, after=${afterScore}`);
+        assert.ok(
+            beforeScore - afterScore >= 0.04,
+            `expected strong suppression on 5.png, before=${beforeScore}, after=${afterScore}`
+        );
+    } finally {
+        await browser.close();
+    }
+});
+
+test('5.png multi-pass removal should avoid sinkhole-like texture collapse', async (t) => {
+    let browser;
+    try {
+        browser = await chromium.launch({ headless: true });
+    } catch (error) {
+        if (isMissingPlaywrightExecutableError(error)) {
+            t.skip('Playwright browser binaries are missing in this environment');
+            return;
+        }
+        throw error;
+    }
+
+    const page = await browser.newPage();
+
+    try {
+        const alpha48 = calculateAlphaMap(await decodeImageDataInPage(page, BG48_PATH));
+        const alpha96 = calculateAlphaMap(await decodeImageDataInPage(page, BG96_PATH));
+        const filePath = path.join(SAMPLE_DIR, '5.png');
+        const imageData = await decodeImageDataInPage(page, filePath);
+        const defaultConfig = detectWatermarkConfig(imageData.width, imageData.height);
+        const config = resolveInitialStandardConfig({
+            imageData,
+            defaultConfig,
+            alpha48,
+            alpha96
+        });
+        const position = calculateWatermarkPosition(imageData.width, imageData.height, config);
+        const alphaMap = config.logoSize === 96 ? alpha96 : interpolateAlphaMap(alpha96, 96, config.logoSize);
+        const result = removeRepeatedWatermarkLayers({
+            imageData,
+            alphaMap,
+            position,
+            maxPasses: 4
+        });
+
+        const refRegion = {
+            x: position.x,
+            y: position.y - position.height,
+            width: position.width,
+            height: position.height
+        };
+        const processedStats = getRegionStats(result.imageData, position);
+        const referenceStats = getRegionStats(imageData, refRegion);
+
+        assert.ok(
+            processedStats.meanLum >= referenceStats.meanLum - 1,
+            `expected processed ROI to stay near local reference brightness, processed=${processedStats.meanLum}, reference=${referenceStats.meanLum}`
+        );
+        assert.ok(
+            processedStats.stdLum >= referenceStats.stdLum * 0.8,
+            `expected processed ROI to keep local texture variance, processed=${processedStats.stdLum}, reference=${referenceStats.stdLum}`
+        );
+    } finally {
+        await browser.close();
+    }
+});
+
+test('5.png metadata should report only the passes that were actually applied', async (t) => {
+    let browser;
+    try {
+        browser = await chromium.launch({ headless: true });
+    } catch (error) {
+        if (isMissingPlaywrightExecutableError(error)) {
+            t.skip('Playwright browser binaries are missing in this environment');
+            return;
+        }
+        throw error;
+    }
+
+    const page = await browser.newPage();
+
+    try {
+        const alpha48 = calculateAlphaMap(await decodeImageDataInPage(page, BG48_PATH));
+        const alpha96 = calculateAlphaMap(await decodeImageDataInPage(page, BG96_PATH));
+        const filePath = path.join(SAMPLE_DIR, '5.png');
+        const imageData = await decodeImageDataInPage(page, filePath);
+        const processed = processWatermarkImageData(imageData, {
+            alpha48,
+            alpha96,
+            maxPasses: 4,
+            getAlphaMap: (size) => size === 48 ? alpha48 : size === 96 ? alpha96 : interpolateAlphaMap(alpha96, 96, size)
+        });
+
+        const appliedPasses = processed.meta.passes ?? [];
+        const lastAppliedIndex = appliedPasses.length > 0
+            ? appliedPasses[appliedPasses.length - 1].index
+            : 0;
+
+        assert.equal(
+            processed.meta.passCount,
+            lastAppliedIndex,
+            `passCount=${processed.meta.passCount}, lastAppliedIndex=${lastAppliedIndex}, stop=${processed.meta.passStopReason}`
+        );
     } finally {
         await browser.close();
     }
