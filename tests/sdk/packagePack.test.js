@@ -2,44 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readdir } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
+import { mkdtemp } from 'node:fs/promises';
 
-const ROOT_DIR = process.cwd();
-const WINDOWS_SHELL = process.env.ComSpec || 'cmd.exe';
-
-function run(command, args, cwd) {
-    const result = spawnSync(
-        process.platform === 'win32' && command === 'pnpm' ? WINDOWS_SHELL : command,
-        process.platform === 'win32' && command === 'pnpm'
-            ? ['/d', '/s', '/c', command, ...args]
-            : args,
-        {
-        cwd,
-        encoding: 'utf8'
-    });
-    if (result.error) {
-        throw result.error;
-    }
-    if (result.status !== 0) {
-        const details = [result.stdout, result.stderr]
-            .filter(Boolean)
-            .join('\n')
-            .trim();
-        throw new Error(details || `${command} failed`);
-    }
-    return result;
-}
+import { packProjectTarball, runCommand } from './testUtils.js';
 
 test('pnpm pack should publish sdk entrypoints without shipping test fixtures', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'wm-pack-'));
-    run('pnpm', ['pack', '--pack-destination', tempDir], ROOT_DIR);
-
-    const packedFiles = await readdir(tempDir);
-    assert.equal(packedFiles.length, 1, `expected exactly one tarball, got ${packedFiles.join(', ')}`);
-
-    const tarballPath = path.join(tempDir, packedFiles[0]);
-    const listing = run('tar', ['-tf', tarballPath], ROOT_DIR).stdout
+    const tarballPath = await packProjectTarball(tempDir);
+    const listing = runCommand('tar', ['-tf', tarballPath]).stdout
         .split(/\r?\n/)
         .filter(Boolean);
 
