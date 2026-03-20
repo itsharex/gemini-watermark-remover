@@ -145,6 +145,10 @@ function startStaticServer(rootDir) {
     });
 }
 
+async function openProcessingHarnessPage(page) {
+    await page.setContent('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body></body></html>');
+}
+
 test('sample assets should match local -fix baselines when they are present', async (t) => {
     const fileNames = (await readdir(SAMPLE_DIR))
         .filter((name) => IMAGE_EXTENSIONS.has(path.extname(name).toLowerCase()))
@@ -179,7 +183,7 @@ test('sample assets should match local -fix baselines when they are present', as
     const { server, baseUrl } = await startStaticServer(ROOT_DIR);
     const page = await browser.newPage();
     try {
-        await page.goto(`${baseUrl}/public/index.html`);
+        await openProcessingHarnessPage(page);
 
         const payload = await Promise.all(filesWithLocalBaselines.map(async (fileName) => {
             const inputPath = path.join(SAMPLE_DIR, fileName);

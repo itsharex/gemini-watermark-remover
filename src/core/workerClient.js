@@ -90,6 +90,10 @@ export class WatermarkWorkerClient {
         });
     }
 
+    async ping(timeoutMs = 3000) {
+        await this.request('ping', {}, [], timeoutMs);
+    }
+
     async processBlob(blob, options = {}) {
         const inputBuffer = await blob.arrayBuffer();
         const result = await this.request(

@@ -22,6 +22,7 @@ class FakeWorker {
 
     postMessage(payload) {
         this.lastPosted = payload;
+        FakeWorker.lastPostedType = payload.type;
         const response = {
             id: payload.id,
             ok: true,
@@ -65,6 +66,16 @@ test('WatermarkWorkerClient should process image blob via worker protocol', asyn
     assert.equal(result.meta.source, 'worker');
     assert.equal(result.blob.type, 'image/png');
     assert.equal(result.blob.size, 3);
+});
+
+test('WatermarkWorkerClient should verify worker readiness with ping', async () => {
+    const client = new WatermarkWorkerClient({
+        WorkerClass: FakeWorker,
+        workerUrl: './watermark-worker.js'
+    });
+
+    await assert.doesNotReject(() => client.ping());
+    assert.equal(FakeWorker.lastPostedType, 'ping');
 });
 
 test('WatermarkWorkerClient should cleanup pending request when postMessage throws', async () => {

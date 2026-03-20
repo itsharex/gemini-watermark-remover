@@ -1,11 +1,10 @@
 import * as esbuild from 'esbuild';
-import { cpSync, rmSync, existsSync, mkdirSync, watch, statSync, createReadStream, writeFileSync } from 'node:fs';
+import { cpSync, rmSync, existsSync, mkdirSync, watch, statSync, createReadStream } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { extname, join, normalize, resolve } from 'node:path';
 import { execSync } from 'child_process';
-import { buildExtensionManifest } from './src/extension/manifest.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('./package.json');
@@ -40,7 +39,11 @@ const userscriptBanner = `// ==UserScript==
 // @icon         https://www.google.com/s2/favicons?domain=gemini.google.com
 // @author       GargantuaX
 // @license      MIT
+// @match        https://gemini.google.com/app
+// @match        https://gemini.google.com/app/*
 // @match        https://gemini.google.com/*
+// @match        https://business.gemini.google/app
+// @match        https://business.gemini.google/app/*
 // @match        https://business.gemini.google/*
 // @connect      googleusercontent.com
 // @grant        unsafeWindow
@@ -63,31 +66,6 @@ const copyAssetsPlugin = {
       }
     });
   },
-};
-
-const syncExtensionAssets = () => {
-  mkdirSync('dist/extension', { recursive: true });
-  cpSync('src/extension/popup.html', 'dist/extension/popup.html');
-  writeFileSync(
-    'dist/extension/manifest.json',
-    `${JSON.stringify(buildExtensionManifest({
-      version: pkg.version,
-      description: pkg.description
-    }), null, 2)}\n`
-  );
-};
-
-const copyExtensionAssetsPlugin = {
-  name: 'copy-extension-assets',
-  setup(build) {
-    build.onEnd(() => {
-      try {
-        syncExtensionAssets();
-      } catch (error) {
-        console.error('❌ Extension asset sync failed:', error);
-      }
-    });
-  }
 };
 
 const commonConfig = {
@@ -234,76 +212,25 @@ const userscriptCtx = await esbuild.context({
   }
 });
 
-const extensionContentScriptCtx = await esbuild.context({
-  ...commonConfig,
-  entryPoints: ['src/extension/contentScript.js'],
-  outfile: 'dist/extension/content-script.js',
-  platform: 'browser',
-  target: ['es2020'],
-  sourcemap: !isProd,
-  plugins: [copyExtensionAssetsPlugin]
-});
-
-const extensionPageHookCtx = await esbuild.context({
-  ...commonConfig,
-  entryPoints: ['src/extension/pageHook.js'],
-  outfile: 'dist/extension/page-hook.js',
-  platform: 'browser',
-  target: ['es2020'],
-  sourcemap: !isProd,
-  plugins: [copyExtensionAssetsPlugin]
-});
-
-const extensionBackgroundCtx = await esbuild.context({
-  ...commonConfig,
-  entryPoints: ['src/extension/background.js'],
-  outfile: 'dist/extension/background.js',
-  platform: 'browser',
-  format: 'esm',
-  target: ['es2020'],
-  sourcemap: !isProd,
-  plugins: [copyExtensionAssetsPlugin]
-});
-
-const extensionPopupCtx = await esbuild.context({
-  ...commonConfig,
-  entryPoints: ['src/extension/popup.js'],
-  outfile: 'dist/extension/popup.js',
-  platform: 'browser',
-  target: ['es2020'],
-  sourcemap: !isProd,
-  plugins: [copyExtensionAssetsPlugin]
-});
-
 console.log(`🚀 Starting build process... [${isProd ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
 
 if (existsSync('dist')) rmSync('dist', { recursive: true });
 mkdirSync('dist/userscript', { recursive: true });
 mkdirSync('dist/workers', { recursive: true });
-mkdirSync('dist/extension', { recursive: true });
 
 if (isProd) {
   await Promise.all([
     websiteCtx.rebuild(),
     workerCtx.rebuild(),
-    userscriptCtx.rebuild(),
-    extensionPageHookCtx.rebuild(),
-    extensionContentScriptCtx.rebuild(),
-    extensionBackgroundCtx.rebuild(),
-    extensionPopupCtx.rebuild()
+    userscriptCtx.rebuild()
   ]);
-  syncExtensionAssets();
   console.log('✅ Build complete!');
   process.exit(0);
 } else {
   await Promise.all([
     websiteCtx.watch(),
     workerCtx.watch(),
-    userscriptCtx.watch(),
-    extensionPageHookCtx.watch(),
-    extensionContentScriptCtx.watch(),
-    extensionBackgroundCtx.watch(),
-    extensionPopupCtx.watch()
+    userscriptCtx.watch()
   ]);
 
   const watchDir = (dir, dest) => {
@@ -325,7 +252,6 @@ if (isProd) {
   };
   watchDir('src/i18n', 'dist/i18n');
   watchDir('public', 'dist');
-  syncExtensionAssets();
 
   await serveStaticDevDist('dist');
 

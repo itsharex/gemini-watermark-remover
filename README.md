@@ -8,7 +8,6 @@ An open-source tool to **remove Gemini watermarks** from AI-generated images —
 
 <p align="center">
   <a href="https://pilio.ai/gemini-watermark-remover"><img src="https://img.shields.io/badge/🛠️_Online_Tool-pilio.ai-blue?style=for-the-badge" alt="Online Tool"></a>&nbsp;
-  <img src="https://img.shields.io/badge/🧩_Chrome_Extension-local_build-orange?style=for-the-badge" alt="Chrome Extension">&nbsp;
   <a href="https://gemini.pilio.ai/userscript/gemini-watermark-remover.user.js"><img src="https://img.shields.io/badge/🐒_Userscript-Install-green?style=for-the-badge" alt="Userscript"></a>&nbsp;
   <a href="https://gemini.pilio.ai"><img src="https://img.shields.io/badge/🧪_Dev_Preview-gemini.pilio.ai-gray?style=for-the-badge" alt="Developer Preview"></a>
 </p>
@@ -90,45 +89,9 @@ Current userscript boundaries:
 - preview images keep the original visible while processing, with a subdued `Processing...` overlay
 - if preview processing fails, the original page image stays visible and usable
 
-### Chrome Extension (Development Build)
-
-If you prefer tighter permission boundaries and local browser integration, load the unpacked Chrome extension build:
-
-1. Run `pnpm build`
-2. Open the extensions management page in Chrome or Edge
-3. Enable Developer mode
-4. Click `Load unpacked`
-5. Select `dist/extension`
-
-Current extension build supports:
-
-- per-image `toggle / copy / download` controls
-- processed image shown by default
-- viewport-triggered processing
-- popup action for bulk download of processed images
-- a setting to show or hide native Gemini image buttons
-
-For repeatable debugging, use one of these two workflows:
-
-```bash
-pnpm debug:auto
-pnpm debug:manual
-```
-
-- `pnpm debug:auto`
-  - uses Playwright Chromium
-  - auto-loads `dist/extension`
-  - best for automated regression checks, screenshots, and dumping `.chrome-debug/last-debug-state.json`
-- `pnpm debug:manual`
-  - uses your local Chrome with an isolated profile
-  - best for Google sign-in and manual verification
-  - after launch, manually load `dist/extension` from `chrome://extensions`
-
-This split exists because branded Chrome 137+ no longer supports command-line extension loading with `--load-extension`.
-
 ### Developer Preview
 
-If you are a developer or contributor, you can preview the latest development build at [gemini.pilio.ai](https://gemini.pilio.ai). This version may contain experimental features and is not intended for general use.
+If you are a developer or contributor, you can preview the latest development build at [gemini.pilio.ai](https://gemini.pilio.ai). This site is a separate online preview/local-processing experience, distinct from the userscript. It may contain experimental features and is not intended for general use.
 
 ## Development
 
@@ -203,9 +166,6 @@ const result = await removeWatermarkFromBuffer(inputBuffer, {
 ```bash
 # Run all tests
 pnpm test
-
-# Run only the Chrome extension smoke test
-pnpm test:extension-smoke
 ```
 
 Regression tests include image fixtures from `src/assets/samples/`.

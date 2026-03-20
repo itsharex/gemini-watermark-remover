@@ -39,7 +39,20 @@ async function canvasToPngBlob(canvas) {
 
 self.addEventListener('message', async (event) => {
     const payload = event.data;
-    if (!payload || payload.type !== 'process-image') return;
+    if (!payload || typeof payload.type !== 'string') return;
+
+    if (payload.type === 'ping') {
+        self.postMessage({
+            id: payload.id,
+            ok: true,
+            result: {
+                ready: true
+            }
+        });
+        return;
+    }
+
+    if (payload.type !== 'process-image') return;
 
     const { id, inputBuffer, mimeType, options } = payload;
     try {
@@ -71,4 +84,3 @@ self.addEventListener('message', async (event) => {
         });
     }
 });
-
