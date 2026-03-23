@@ -1044,6 +1044,76 @@ function revokeTrackedObjectUrl(imageElement) {
   delete imageElement.dataset[PAGE_IMAGE_OBJECT_URL_KEY];
 }
 
+function resolveImageOverlayBox(imageElement, container) {
+  const imageRect = normalizeCaptureRect(imageElement?.getBoundingClientRect?.());
+  const containerRect = normalizeCaptureRect(container?.getBoundingClientRect?.());
+
+  if (!imageRect || !containerRect) {
+    return null;
+  }
+
+  const left = imageRect.left - containerRect.left;
+  const top = imageRect.top - containerRect.top;
+
+  if (![left, top].every(Number.isFinite)) {
+    return null;
+  }
+
+  if (imageRect.width <= 0 || imageRect.height <= 0) {
+    return null;
+  }
+
+  return {
+    left,
+    top,
+    width: imageRect.width,
+    height: imageRect.height
+  };
+}
+
+function findContainerChildForDescendant(container, descendant) {
+  let current = descendant;
+
+  const getParent = (node) => node?.parentElement || node?.parentNode || null;
+
+  while (getParent(current) && getParent(current) !== container) {
+    current = getParent(current);
+  }
+
+  if (getParent(current) === container) {
+    return current;
+  }
+
+  return null;
+}
+
+function resolvePreviewOverlayMount(imageElement) {
+  const container = getPreferredGeminiImageContainer(imageElement) || imageElement?.parentElement || null;
+  if (!container) {
+    return {
+      container: null,
+      referenceNode: null
+    };
+  }
+
+  const controls = typeof container.querySelector === 'function'
+    ? container.querySelector('.generated-image-controls')
+    : null;
+  const controlsParent = controls?.parentElement || controls?.parentNode || null;
+
+  if (controlsParent && typeof controlsParent.appendChild === 'function') {
+    return {
+      container: controlsParent,
+      referenceNode: controls
+    };
+  }
+
+  return {
+    container,
+    referenceNode: findContainerChildForDescendant(container, controls)
+  };
+}
+
 function applySkippedImageState(imageElement) {
   imageElement.dataset[PAGE_IMAGE_STATE_KEY] = 'skipped';
   hideProcessingOverlay(imageElement, { removeImmediately: true });
@@ -1054,19 +1124,24 @@ function applyReadyImageState(imageElement, processedBlob) {
   revokeTrackedObjectUrl(imageElement);
   imageElement.dataset[PAGE_IMAGE_OBJECT_URL_KEY] = objectUrl;
   imageElement.dataset[PAGE_IMAGE_STATE_KEY] = 'ready';
-  const container = getPreferredGeminiImageContainer(imageElement) || imageElement?.parentElement || null;
+  const { container, referenceNode } = resolvePreviewOverlayMount(imageElement);
   if (container && typeof container.appendChild === 'function') {
-    const overlay = document.createElement('img');
+    const overlay = document.createElement('div');
     overlay.dataset[PREVIEW_OVERLAY_DATA_KEY] = 'true';
-    overlay.src = objectUrl;
+    const overlayBox = resolveImageOverlayBox(imageElement, container);
     if (overlay.style && typeof overlay.style === 'object') {
       Object.assign(overlay.style, {
         position: 'absolute',
-        inset: '0',
-        width: '100%',
-        height: '100%',
-        objectFit: 'contain',
-        pointerEvents: 'none'
+        inset: overlayBox ? 'auto' : '0',
+        left: overlayBox ? `${overlayBox.left}px` : '0',
+        top: overlayBox ? `${overlayBox.top}px` : '0',
+        width: overlayBox ? `${overlayBox.width}px` : '100%',
+        height: overlayBox ? `${overlayBox.height}px` : '100%',
+        pointerEvents: 'none',
+        backgroundImage: `url("${objectUrl}")`,
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: 'contain'
       });
     }
     if (
@@ -1076,7 +1151,14 @@ function applyReadyImageState(imageElement, processedBlob) {
     ) {
       container.style.position = 'relative';
     }
-    container.appendChild(overlay);
+    if (
+      referenceNode
+      && typeof container.insertBefore === 'function'
+    ) {
+      container.insertBefore(overlay, referenceNode);
+    } else {
+      container.appendChild(overlay);
+    }
     const previousOpacity = typeof imageElement?.style?.opacity === 'string' ? imageElement.style.opacity : '';
     if (imageElement?.style && typeof imageElement.style === 'object') {
       imageElement.style.opacity = '0';

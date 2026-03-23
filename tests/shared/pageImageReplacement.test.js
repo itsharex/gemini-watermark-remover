@@ -836,7 +836,7 @@ test('applyPageImageProcessingResult should apply ready state and emit success p
     assert.equal(image.src, 'https://lh3.googleusercontent.com/gg/example-token=s1024-rj');
     assert.equal(container.children.length, 1);
     assert.equal(container.children[0].dataset.gwrPreviewImage, 'true');
-    assert.equal(container.children[0].src, `blob:mock:${processedBlob.size}`);
+    assert.equal(container.children[0].style.backgroundImage, `url(\"blob:mock:${processedBlob.size}\")`);
     assert.deepEqual(logs.map(([type]) => type), ['page-image-process-success']);
     assert.equal(logs[0][1].strategy, 'preview-candidate');
     assert.equal(logs[0][1].blobType, 'image/png');
@@ -942,12 +942,149 @@ test('createPageImageReplacementController should apply successful helper result
     assert.equal(image.src, 'https://lh3.googleusercontent.com/gg/example-token=s1024-rj');
     assert.equal(container.children.length, 1);
     assert.equal(container.children[0].dataset.gwrPreviewImage, 'true');
-    assert.equal(container.children[0].src, `blob:mock:${previewBlob.size}`);
+    assert.equal(container.children[0].style.backgroundImage, `url(\"blob:mock:${previewBlob.size}\")`);
     assert.deepEqual(
       logs.map(([type]) => type),
       ['page-image-process-start', 'page-image-process-strategy', 'page-image-process-success']
     );
     assert.equal(logs[2][1].strategy, 'page-fetch');
+  });
+});
+
+test('applyPageImageProcessingResult should keep preview overlay constrained to the rendered image box instead of the whole Gemini container', async () => {
+  await withPageImageTestEnv(async ({ MockHTMLImageElement }) => {
+    const processedBlob = new Blob(['processed'], { type: 'image/png' });
+    const container = createMockElement('div');
+    container.getBoundingClientRect = () => ({
+      left: 100,
+      top: 80,
+      width: 900,
+      height: 700
+    });
+
+    const image = new MockHTMLImageElement();
+    image.dataset = {
+      gwrSourceUrl: 'https://lh3.googleusercontent.com/gg/example-token=s1024-rj'
+    };
+    image.style = {};
+    image.src = 'https://lh3.googleusercontent.com/gg/example-token=s1024-rj';
+    image.currentSrc = image.src;
+    image.parentElement = container;
+    image.closest = (selector) => selector === 'generated-image,.generated-image-container'
+      ? container
+      : null;
+    image.getBoundingClientRect = () => ({
+      left: 140,
+      top: 120,
+      width: 640,
+      height: 360
+    });
+
+    applyPageImageProcessingResult({
+      imageElement: image,
+      sourceUrl: image.src,
+      normalizedUrl: image.src,
+      sourceResult: {
+        skipped: false,
+        processedBlob,
+        selectedStrategy: 'page-fetch'
+      },
+      logger: createSilentLogger()
+    });
+
+    assert.equal(container.children.length, 1);
+    assert.equal(container.children[0].dataset.gwrPreviewImage, 'true');
+    assert.equal(container.children[0].style.inset, 'auto');
+    assert.equal(container.children[0].style.left, '40px');
+    assert.equal(container.children[0].style.top, '40px');
+    assert.equal(container.children[0].style.width, '640px');
+    assert.equal(container.children[0].style.height, '360px');
+  });
+});
+
+test('applyPageImageProcessingResult should mount preview overlay inside overlay-container before generated-image-controls', async () => {
+  await withPageImageTestEnv(async ({ MockHTMLImageElement }) => {
+    const processedBlob = new Blob(['processed'], { type: 'image/png' });
+    const controls = createMockElement('div');
+    controls.className = 'generated-image-controls';
+    const overlayContainer = createMockElement('div');
+    overlayContainer.className = 'overlay-container';
+    overlayContainer.insertBefore = (child, referenceNode) => {
+      child.parentNode = overlayContainer;
+      const index = overlayContainer.children.indexOf(referenceNode);
+      if (index === -1) {
+        overlayContainer.children.push(child);
+      } else {
+        overlayContainer.children.splice(index, 0, child);
+      }
+      return child;
+    };
+    const imageContainer = createMockElement('div');
+    imageContainer.className = 'image-container';
+    const singleImage = createMockElement('single-image');
+    singleImage.className = 'generated-image large';
+    const container = createMockElement('div');
+    container.getBoundingClientRect = () => ({
+      left: 100,
+      top: 80,
+      width: 900,
+      height: 700
+    });
+    container.querySelector = (selector) => selector === '.generated-image-controls' ? controls : null;
+    container.insertBefore = (child, referenceNode) => {
+      child.parentNode = container;
+      const index = container.children.indexOf(referenceNode);
+      if (index === -1) {
+        container.children.push(child);
+      } else {
+        container.children.splice(index, 0, child);
+      }
+      return child;
+    };
+    overlayContainer.appendChild(controls);
+    imageContainer.appendChild(overlayContainer);
+    singleImage.appendChild(imageContainer);
+    container.appendChild(singleImage);
+
+    const image = new MockHTMLImageElement();
+    image.dataset = {
+      gwrSourceUrl: 'https://lh3.googleusercontent.com/gg/example-token=s1024-rj'
+    };
+    image.style = {};
+    image.src = 'https://lh3.googleusercontent.com/gg/example-token=s1024-rj';
+    image.currentSrc = image.src;
+    image.parentElement = container;
+    image.closest = (selector) => selector === 'generated-image,.generated-image-container'
+      ? container
+      : null;
+    image.getBoundingClientRect = () => ({
+      left: 140,
+      top: 120,
+      width: 640,
+      height: 360
+    });
+
+    applyPageImageProcessingResult({
+      imageElement: image,
+      sourceUrl: image.src,
+      normalizedUrl: image.src,
+      sourceResult: {
+        skipped: false,
+        processedBlob,
+        selectedStrategy: 'page-fetch'
+      },
+      logger: createSilentLogger()
+    });
+
+    const overlayIndex = container.children.findIndex((child) => child.dataset?.gwrPreviewImage === 'true');
+    const controlsIndex = overlayContainer.children.indexOf(controls);
+    const previewIndex = overlayContainer.children.findIndex((child) => child.dataset?.gwrPreviewImage === 'true');
+
+    assert.equal(overlayIndex, -1);
+    assert.notEqual(previewIndex, -1);
+    assert.notEqual(controlsIndex, -1);
+    assert.ok(previewIndex < controlsIndex);
+    assert.equal(overlayContainer.children[previewIndex].parentNode, overlayContainer);
   });
 });
 
